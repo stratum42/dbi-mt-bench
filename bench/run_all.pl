@@ -660,6 +660,8 @@ push @md, "- **HTTP Load Generator**: `wrk -t$threads -c$connections -d${duratio
 push @md, "- **RSS Measurement**: Total process-tree RSS (`ps -o pid=,ppid=,rss= -ax`) sampled during active load (median MiB).";
 push @md, "- **Reproduce**: `./run_bench.sh`";
 push @md, "";
+push @md, "Note that this is a whole-stack comparison rather than a single-variable isolation: the stock baseline runs Perl `$stock_ver`, while `perl5-mt` is forked from `$mt_ver` (built with PGO/native flags when `../perl5-mt-pgo/perl` is present).";
+push @md, "";
 
 push @md, "## 1. End-to-End HTTP + SQLite API Benchmark";
 push @md, "";
@@ -774,6 +776,68 @@ for my $w (@ODBC_WORKERS) {
     $m->{rss_mib},
   );
 }
+push @md, "";
+
+push @md, "## Notes and Trade-offs";
+push @md, "";
+push @md, "A few results deserve plain explanation so the tables are not misread:";
+push @md, "";
+
+if (exists $CONC_RESULTS{mixed}{stock} && exists $CONC_RESULTS{mixed}{mt}) {
+  my $s = $CONC_RESULTS{mixed}{stock};
+  my $m = $CONC_RESULTS{mixed}{mt};
+  my $rss_sav = ($s->{rss_mib} > 0) ? sprintf('%.1f%%', (1.0 - $m->{rss_mib} / $s->{rss_mib}) * 100.0) : 'n/a';
+  push @md, sprintf(
+    "- **Mixed 90/10 read/write contention (Section 2a)**: With `SQLITE_OPEN_NOMUTEX` and an adaptive sub-millisecond WAL busy handler, `MT::Worker` sits close to stock `fork` (%s vs %s ops/s, %s) while using %s less RSS (%.1f vs %.1f MiB), though separate OS processes still edge ahead slightly under heavy concurrent WAL write contention.",
+    _fmt_int($m->{ops_per_sec}), _fmt_int($s->{ops_per_sec}), _fmt_ratio($m->{ops_per_sec}, $s->{ops_per_sec}),
+    $rss_sav, $m->{rss_mib}, $s->{rss_mib},
+  );
+}
+
+if (exists $HTTP_RESULTS{8}{stock}{update} && exists $HTTP_RESULTS{8}{mt}{update}) {
+  my $s8 = $HTTP_RESULTS{8}{stock}{update};
+  my $m8 = $HTTP_RESULTS{8}{mt}{update};
+  my $s4 = $HTTP_RESULTS{4}{stock}{update};
+  my $m4 = $HTTP_RESULTS{4}{mt}{update};
+  push @md, sprintf(
+    "- **WAL single-writer serialization on `POST /db/update` (Section 1)**: SQLite WAL only permits one active writer at a time, so throughput is essentially flat across both stacks (%s at 4 workers, %s at 8 workers). The adaptive busy handler substantially reduces 8-worker MT tail latency compared to SQLite's coarse default backoff, but MT p95/p99 (%.2f / %.2f ms) still trails stock `prefork` (%.2f / %.2f ms) when 8 threads contend on the single writer lock. Write-heavy SQLite workloads remain more predictable under `prefork` at high worker counts.",
+    _fmt_ratio($m4->{rps}, $s4->{rps}), _fmt_ratio($m8->{rps}, $s8->{rps}),
+    $m8->{p95_ms}, $m8->{p99_ms}, $s8->{p95_ms}, $s8->{p99_ms},
+  );
+}
+
+if (defined $SIMD_NEON->{chopblanks_char_512} && defined $SIMD_SCALAR->{chopblanks_char_512} && defined $SIMD_STOCK->{chopblanks_char_512}) {
+  push @md, sprintf(
+    "- **`ChopBlanks => 1` on SQLite (Section 2b)**: Wiring `dbi_rtrim_spaces_len` into `dbd-sqlite-mt` yields a clear win on wide trailing-space-padded `CHAR(512)` columns (%s vs stock, %s vs scalar). On shorter WAL columns (50-row range scan), query execution and SV allocation still dominate, so SIMD vs scalar is essentially neutral (%s), with the %s gain over stock coming mostly from `SQLITE_OPEN_NOMUTEX` and runtime differences.",
+    _fmt_ratio($SIMD_NEON->{chopblanks_char_512}, $SIMD_STOCK->{chopblanks_char_512}),
+    _fmt_ratio($SIMD_NEON->{chopblanks_char_512}, $SIMD_SCALAR->{chopblanks_char_512}),
+    _fmt_ratio($SIMD_NEON->{chopblanks_sqlite_50}, $SIMD_SCALAR->{chopblanks_sqlite_50}),
+    _fmt_ratio($SIMD_NEON->{chopblanks_sqlite_50}, $SIMD_STOCK->{chopblanks_sqlite_50}),
+  );
+}
+
+if (defined $SIMD_NEON->{neat_ascii_512} && defined $SIMD_NEON->{neat_mixed_128} && defined $SIMD_NEON->{neat_ascii_64}) {
+  push @md, sprintf(
+    "- **`DBI::neat` / `neatsvpv` (Section 2b)**: Gating SIMD scanning on strings >= 128 bytes eliminates the earlier regression against the scalar twin: 128B mixed strings are now %s vs scalar (%s vs stock), 64B clean ASCII stays at scalar parity (%s vs scalar, %s vs stock), and 512B clean ASCII benefits from SIMD (%s vs stock, %s vs scalar). On short inputs, stock Perl `$stock_ver` remains slightly faster.",
+    _fmt_ratio($SIMD_NEON->{neat_mixed_128}, $SIMD_SCALAR->{neat_mixed_128}),
+    _fmt_ratio($SIMD_NEON->{neat_mixed_128}, $SIMD_STOCK->{neat_mixed_128}),
+    _fmt_ratio($SIMD_NEON->{neat_ascii_64}, $SIMD_SCALAR->{neat_ascii_64}),
+    _fmt_ratio($SIMD_NEON->{neat_ascii_64}, $SIMD_STOCK->{neat_ascii_64}),
+    _fmt_ratio($SIMD_NEON->{neat_ascii_512}, $SIMD_STOCK->{neat_ascii_512}),
+    _fmt_ratio($SIMD_NEON->{neat_ascii_512}, $SIMD_SCALAR->{neat_ascii_512}),
+  );
+}
+
+if (exists $ODBC_RESULTS{1}{read} && exists $ODBC_RESULTS{8}{read}) {
+  push @md, sprintf(
+    "- **ODBC thread scaling (Section 2c)**: `dbd-odbc-mt` runs under Tier-1 `PERL_XS_THREADSAFE=1` with `DBI::MT::Pool`, but read throughput tapers from 1 thread (%s ops/s) to 8 threads (%s ops/s) as threads contend on `sqliteodbc` / `unixODBC` internal mutexes and the connection pool cap.",
+    _fmt_int($ODBC_RESULTS{1}{read}{ops_per_sec}),
+    _fmt_int($ODBC_RESULTS{8}{read}{ops_per_sec}),
+  );
+}
+
+push @md, "";
+push @md, "If you run `./run_bench.sh` on other hardware, operating systems, or database engines, feedback and counterexamples are welcome.";
 push @md, "";
 
 open my $out, '>', $out_file or die "Cannot write $out_file: $!\n";
