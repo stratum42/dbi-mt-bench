@@ -7,3 +7,5 @@
 *.tmp
 tmp/
 .bench-tmp/
+node_modules/
+polyglot/go/server
