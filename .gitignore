@@ -1,0 +1,9 @@
+.stock-lib/
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.log
+*.tmp
+tmp/
+.bench-tmp/
