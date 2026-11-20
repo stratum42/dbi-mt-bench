@@ -16,7 +16,11 @@ DBD_SQLITE_MT_DIR="${DBD_SQLITE_MT_DIR:-$PARENT_DIR/dbd-sqlite-mt}"
 STOCK_LIB="${STOCK_LIB:-$SCRIPT_DIR/.stock-lib}"
 
 if [ -z "${DBI_STOCK_REF:-}" ]; then
-  if git -C "$DBI_MT_DIR" rev-parse --verify -q origin/HEAD >/dev/null 2>&1; then
+  if git -C "$DBI_MT_DIR" rev-parse --verify -q upstream/HEAD >/dev/null 2>&1; then
+    DBI_STOCK_REF="upstream/HEAD"
+  elif git -C "$DBI_MT_DIR" rev-parse --verify -q upstream/master >/dev/null 2>&1; then
+    DBI_STOCK_REF="upstream/master"
+  elif git -C "$DBI_MT_DIR" rev-parse --verify -q origin/HEAD >/dev/null 2>&1; then
     DBI_STOCK_REF="origin/HEAD"
   else
     DBI_STOCK_REF="HEAD"
@@ -24,7 +28,11 @@ if [ -z "${DBI_STOCK_REF:-}" ]; then
 fi
 
 if [ -z "${DBD_SQLITE_STOCK_REF:-}" ]; then
-  if git -C "$DBD_SQLITE_MT_DIR" rev-parse --verify -q origin/HEAD >/dev/null 2>&1; then
+  if git -C "$DBD_SQLITE_MT_DIR" rev-parse --verify -q upstream/HEAD >/dev/null 2>&1; then
+    DBD_SQLITE_STOCK_REF="upstream/HEAD"
+  elif git -C "$DBD_SQLITE_MT_DIR" rev-parse --verify -q upstream/master >/dev/null 2>&1; then
+    DBD_SQLITE_STOCK_REF="upstream/master"
+  elif git -C "$DBD_SQLITE_MT_DIR" rev-parse --verify -q origin/HEAD >/dev/null 2>&1; then
     DBD_SQLITE_STOCK_REF="origin/HEAD"
   else
     DBD_SQLITE_STOCK_REF="HEAD"

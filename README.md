@@ -59,8 +59,8 @@ All repository and binary paths default to sibling checkouts (`../*`) resolved r
 |---|---|---|
 | `STOCK_PERL` | `/opt/homebrew/bin/perl` (or `perl` in `PATH`) | Stock Perl interpreter for baseline runs and `.stock-lib/` builds. |
 | `STOCK_LIB` | `./.stock-lib/lib/perl5` | Isolated stock DBI + stock DBD::SQLite library directory. |
-| `DBI_STOCK_REF` | `origin/HEAD` (fallback `HEAD`) | Git ref in `dbi-mt` archived for the clean upstream stock DBI build. |
-| `DBD_SQLITE_STOCK_REF` | `origin/HEAD` (fallback `HEAD`) | Git ref in `dbd-sqlite-mt` archived for the clean upstream stock DBD::SQLite build. |
+| `DBI_STOCK_REF` | `upstream/HEAD` (fallback `origin/HEAD`, `HEAD`) | Git ref in `dbi-mt` archived for the clean upstream stock DBI build. |
+| `DBD_SQLITE_STOCK_REF` | `upstream/HEAD` (fallback `origin/HEAD`, `HEAD`) | Git ref in `dbd-sqlite-mt` archived for the clean upstream stock DBD::SQLite build. |
 | `PERL5_MT_DIR` | `../perl5-mt-pgo` (if present), else `../perl5-mt` | `perl5-mt` build directory containing `perl` and `lib/`. |
 | `PERL5_MT` / `PERL5_MT_LIB` | `$PERL5_MT_DIR/perl` / `$PERL5_MT_DIR/lib` | Explicit overrides for the `perl5-mt` binary and library path. |
 | `MOJO_MT_DIR` | `../mojolicious-mt` | Path to `mojolicious-mt`. |

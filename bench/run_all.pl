@@ -597,9 +597,11 @@ sub _display_path {
 
 sub _stock_git_ref {
   my ($dir) = @_;
-  my $origin = _cmd_line('git', '-C', $dir, 'rev-parse', '--short', 'origin/HEAD');
-  return $origin if length $origin;
-  return _cmd_line('git', '-C', $dir, 'rev-parse', '--short', 'HEAD') || 'unknown';
+  for my $ref (qw(upstream/HEAD upstream/master origin/HEAD HEAD)) {
+    my $sha = _cmd_line('git', '-C', $dir, 'rev-parse', '--short', $ref);
+    return $sha if length $sha;
+  }
+  return 'unknown';
 }
 
 my $os_name = _cmd_line('uname', '-s') || $^O;
